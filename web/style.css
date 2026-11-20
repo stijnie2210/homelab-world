@@ -37,6 +37,24 @@ canvas.dragging { cursor: grabbing; }
   font-weight: 600;
 }
 
+#banner {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 10px 14px;
+  background: rgba(16, 18, 36, 0.94);
+  border: 2px solid #ff6b6b;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
+  color: #ffd0d0;
+  font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+#banner[hidden] { display: none; }
+
 #tip .ok { color: #8fe388; }
 #tip .bad { color: #ff6b6b; }
 #tip .meh { color: #e6b83c; }

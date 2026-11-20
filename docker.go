@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,34 +20,88 @@ const (
 	labelHide = "homelab-world.hide"
 )
 
-// Minimal Docker Engine API client over the unix socket. Stdlib only.
+// Minimal Docker Engine API client over a unix socket or TCP (a socket proxy). Stdlib only.
 type dockerClient struct {
-	http *http.Client
+	host    string
+	base    string
+	http    *http.Client
+	mu      sync.Mutex
+	version string
 }
 
-func newDockerClient(sock string) *dockerClient {
-	return &dockerClient{http: &http.Client{Transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+func newDockerClient(host string) (*dockerClient, error) {
+	tr := &http.Transport{}
+	base := "http://docker"
+	switch {
+	case strings.HasPrefix(host, "unix://"):
+		sock := strings.TrimPrefix(host, "unix://")
+		tr.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", sock)
-		},
-	}}}
+		}
+	case strings.HasPrefix(host, "tcp://"), strings.HasPrefix(host, "http://"):
+		u, err := url.Parse(host)
+		if err != nil || u.Host == "" {
+			return nil, fmt.Errorf("bad DOCKER_HOST %q", host)
+		}
+		base = "http://" + u.Host
+	default:
+		return nil, fmt.Errorf("unsupported DOCKER_HOST %q: use unix:///path/to/docker.sock or tcp://host:port", host)
+	}
+	return &dockerClient{host: host, base: base, http: &http.Client{Transport: tr}}, nil
+}
+
+func (d *dockerClient) url(ctx context.Context, path string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.version == "" {
+		d.version = d.ping(ctx)
+	}
+	if d.version == "" {
+		return d.base + path
+	}
+	return d.base + "/v" + d.version + path
+}
+
+func (d *dockerClient) ping(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.base+"/_ping", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := d.http.Do(req)
+	if err != nil {
+		return ""
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	return resp.Header.Get("Api-Version")
 }
 
 func (d *dockerClient) get(ctx context.Context, path string, v any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker"+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.url(ctx, path), nil)
 	if err != nil {
 		return err
 	}
 	resp, err := d.http.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("can't reach Docker at %s: %w", d.host, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("docker %s: %s", path, resp.Status)
+		return apiError(req, resp)
 	}
 	return json.NewDecoder(resp.Body).Decode(v)
+}
+
+func apiError(req *http.Request, resp *http.Response) error {
+	if resp.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("Docker refused GET %s (403 Forbidden). If you use a socket proxy, allow GET on _ping, containers/json, containers/{id}/stats and events", req.URL.Path)
+	}
+	return fmt.Errorf("Docker answered GET %s with %s", req.URL.Path, resp.Status)
 }
 
 type apiContainer struct {
@@ -184,9 +240,30 @@ type DockerEvent struct {
 // watchEvents streams container lifecycle events until ctx is done, reconnecting on errors.
 func (d *dockerClient) watchEvents(ctx context.Context, emit func(DockerEvent)) {
 	filters := url.QueryEscape(`{"type":["container"]}`)
+	lastErr := ""
+	report := func(err error) {
+		msg := ""
+		if err != nil {
+			msg = err.Error()
+		}
+		if msg != lastErr && msg != "" {
+			log.Printf("events: %s", msg)
+		}
+		lastErr = msg
+	}
 	for ctx.Err() == nil {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/events?filters="+filters, nil)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, d.url(ctx, "/events?filters="+filters), nil)
 		resp, err := d.http.Do(req)
+		switch {
+		case err != nil:
+			report(fmt.Errorf("can't reach Docker at %s: %w", d.host, err))
+		case resp.StatusCode != http.StatusOK:
+			report(apiError(req, resp))
+			resp.Body.Close()
+			err = errors.New(resp.Status)
+		default:
+			report(nil)
+		}
 		if err == nil {
 			dec := json.NewDecoder(resp.Body)
 			for {

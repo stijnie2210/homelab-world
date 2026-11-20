@@ -87,6 +87,7 @@ const fctx = frame.getContext('2d');
 const layer = document.createElement('canvas');
 const lctx = layer.getContext('2d');
 const tip = document.getElementById('tip');
+const banner = document.getElementById('banner');
 
 let W = 320, H = 200, S = 1, GROUND = 156;
 let g = fctx; // current drawing target
@@ -1035,6 +1036,11 @@ function onEvent(e) {
 }
 
 function onSnapshot(m) {
+  banner.hidden = !m.error;
+  if (m.error) {
+    banner.textContent = m.error;
+    return;
+  }
   state.containers = m.containers;
   const key = m.containers.map((c) => c.name + ':' + (c.kind || '')).sort().join('|');
   for (const c of m.containers) {

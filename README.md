@@ -24,7 +24,38 @@ docker compose up -d --build
 open http://localhost:8099
 ```
 
-It reads the Docker socket read-only. The backend is one stdlib-only Go binary with the frontend embedded.
+The backend is one stdlib-only Go binary with the frontend embedded.
+
+On Linux, first put the id of the `docker` group in `.env` (see [Docker access](#docker-access)):
+
+```sh
+echo "DOCKER_GID=$(getent group docker | cut -d: -f3)" >> .env
+```
+
+## Docker access
+
+homelab world never gets the Docker socket itself. The compose file puts [wollomatic/socket-proxy](https://github.com/wollomatic/socket-proxy) in between, on an internal network that only the two of them share, and the proxy allows four read-only requests and refuses everything else:
+
+| Request | Used for |
+|---|---|
+| `GET /_ping` | finding the API version |
+| `GET /containers/json` | the list of containers, with their state, health and labels |
+| `GET /containers/{id}/stats` | CPU, memory and network per container |
+| `GET /events` | starts, stops, crashes and health changes as they happen |
+
+That matters because mounting the socket with `:ro` does not make the Docker API read-only: anything that can talk to the socket can start containers, read their files and environment, and so take over the host. Through the proxy, homelab world can't even inspect a container, so environment variables and secrets never pass through it.
+
+The proxy runs as an unprivileged user in the group that owns the socket. That's group `0` on OrbStack (the default) and the `docker` group on Linux, which is why Linux needs `DOCKER_GID` in `.env`. On Docker Desktop, check with `docker run --rm -v /var/run/docker.sock:/s alpine stat -c %g /s`. If the proxy can't reach the socket or refuses a request, the page says so in a red banner, and `docker logs homelab-world-socket-proxy` shows the refused paths.
+
+Already running a socket proxy? Point `DOCKER_HOST` at it and allow the four requests above. With `tecnativa/docker-socket-proxy` that's `CONTAINERS=1` (`EVENTS` and `PING` are on by default), although that also opens container logs and file downloads. To skip the proxy, mount the socket and set `DOCKER_HOST=unix:///var/run/docker.sock`.
+
+| Variable | Default | |
+|---|---|---|
+| `DOCKER_HOST` | `unix:///var/run/docker.sock` (`tcp://socket-proxy:2375` in the compose file) | `unix://` or `tcp://` |
+| `DOCKER_GID` | `0` | group that owns the Docker socket, for the proxy |
+| `PIHOLE_URL`, `PIHOLE_PASSWORD` | | optional, Pi-hole v6 rain |
+| `POLL_INTERVAL` | `2s` | how often stats are read |
+| `ADDR` | `:8099` | listen address |
 
 ## Buildings
 

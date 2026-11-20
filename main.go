@@ -22,6 +22,7 @@ type Snapshot struct {
 	Time       int64        `json:"time"`
 	Containers []Container  `json:"containers"`
 	Pihole     *PiholeStats `json:"pihole,omitempty"`
+	Error      string       `json:"error,omitempty"`
 }
 
 // hub fans out messages to every connected SSE client and remembers the latest snapshot.
@@ -98,13 +99,20 @@ func (h *hub) serveSSE(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	addr := env("ADDR", ":8099")
-	sock := env("DOCKER_SOCK", "/var/run/docker.sock")
+	host := os.Getenv("DOCKER_HOST")
+	if host == "" {
+		host = "unix://" + env("DOCKER_SOCK", "/var/run/docker.sock")
+	}
 	interval, err := time.ParseDuration(env("POLL_INTERVAL", "2s"))
 	if err != nil {
 		log.Fatalf("bad POLL_INTERVAL: %v", err)
 	}
 
-	docker := newDockerClient(sock)
+	docker, err := newDockerClient(host)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("docker: %s", host)
 	col := &collector{docker: docker, prev: map[string]sample{}}
 	h := &hub{clients: map[chan []byte]struct{}{}}
 
@@ -134,11 +142,18 @@ func main() {
 		tick := time.NewTicker(interval)
 		defer tick.Stop()
 		piholeWarned := false
+		lastErr := ""
 		for {
 			containers, err := col.collect(ctx)
 			if err != nil {
-				log.Printf("collect: %v", err)
+				if err.Error() != lastErr {
+					log.Printf("collect: %v", err)
+					lastErr = err.Error()
+				}
+				msg, _ := json.Marshal(Snapshot{Type: "snapshot", Time: time.Now().UnixMilli(), Error: err.Error()})
+				h.broadcast(msg, true)
 			} else {
+				lastErr = ""
 				snap := Snapshot{Type: "snapshot", Time: time.Now().UnixMilli(), Containers: containers}
 				if pihole != nil {
 					if s, err := pihole.stats(ctx); err == nil {
