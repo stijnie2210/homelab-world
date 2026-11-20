@@ -7,6 +7,9 @@ FIXTURES='
 media jellyfin jellyfin/jellyfin
 media sonarr lscr.io/linuxserver/sonarr
 media radarr lscr.io/linuxserver/radarr
+media prowlarr lscr.io/linuxserver/prowlarr
+media bazarr lscr.io/linuxserver/bazarr
+media seerr ghcr.io/seerr-team/seerr
 media qbittorrent lscr.io/linuxserver/qbittorrent
 media navidrome deluan/navidrome
 home homeassistant ghcr.io/home-assistant/home-assistant

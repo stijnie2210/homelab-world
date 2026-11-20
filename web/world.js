@@ -187,7 +187,8 @@ function goldenAt(h) {
 
 const PALETTE = ['#5b6ee1', '#306082', '#76428a', '#8f563b', '#37946e', '#524b24', '#45283c', '#663931', '#595652', '#3f3f74', '#4b692f', '#847e87'];
 const BRAND = {
-  sonarr: '#2f9fd8', radarr: '#d9a51e', prowlarr: '#d9622b', lidarr: '#2f8f5a', bazarr: '#6c8a3a',
+  sonarr: '#2f9fd8', radarr: '#d9a51e', prowlarr: '#d9622b', lidarr: '#2f8f5a', bazarr: '#6c8a3a', readarr: '#9b3434',
+  whisparr: '#b0447a', jackett: '#3a5a78', autobrr: '#4b6fd6',
   seerr: '#7b5cd6', flaresolverr: '#c9733a', postgres: '#3d6b99', redis: '#b5413a', valkey: '#5a6fd6',
   portainer: '#13a8d9', jellyfin: '#8f2d3a', plex: '#c98a1b', homeassistant: '#2a9fd6', 'home-assistant': '#2a9fd6',
   grafana: '#e8700f', nextcloud: '#0082c9', vaultwarden: '#2f6fd6', bitwarden: '#2f6fd6', authentik: '#fd4b2d',
@@ -199,6 +200,7 @@ const KIND_RULES = [
   ['silo', /[-_]db\b|database|postgres|mysql|mariadb|mongo|redis|valkey|dragonfly|keydb|influx|timescale|clickhouse|elasticsearch|opensearch|meilisearch|typesense|couchdb|etcd/],
   ['bunker', /socket-?proxy|gluetun|wireguard|wg-easy|vpn|tailscale|headscale|netbird|zerotier|cloudflared|crowdsec|fail2ban/],
   ['crane', /portainer|watchtower|diun|whats-?up-?docker|\bwud\b|komodo|dockge|yacht|dockhand/],
+  ['studio', /sonarr|radarr|lidarr|readarr|whisparr|prowlarr|bazarr|mylar|seerr|ombi|recyclarr|unpackerr|notifiarr|autobrr|cross-seed|jackett|nzbhydra/],
   ['cinema', /jellyfin|plex|emby|navidrome|airsonic|funkwhale|jellystat/],
   ['lighthouse', /pihole|pi-hole|adguard|blocky|technitium/],
   ['antenna', /unbound|dnsmasq|coredns|bind9|powerdns/],
@@ -785,6 +787,40 @@ const KINDS = {
       text('OPEN', x + ((b.w - textWidth('OPEN')) >> 1), y - 6, '#ff6b9a');
     },
   },
+
+  studio: {
+    size: (r) => [16, 30 + Math.floor(r() * 14)], extra: 14,
+    windows: (b) => {
+      const out = [];
+      for (let wx = 3; wx <= b.w - 5; wx += 4)
+        for (let wy = 12; wy <= b.h - 9; wy += 5) out.push({ x: wx, y: wy, w: 2, h: 3 });
+      return out;
+    },
+    draw(b, x, y) {
+      const c = col(b, b.color), metal = col(b, '#5a5f6a'), cx = x + (b.w >> 1);
+      R(x, y, b.w, b.h, c);
+      R(x + b.w - 2, y, 2, b.h, shade(c, -0.3));
+      R(x - 1, y, b.w + 2, 1, shade(c, 0.25));
+      R(cx - 3, y + 2, 7, 7, col(b, '#1a1220'));
+      const letter = (b.name.match(/[a-z]/i) || ['?'])[0];
+      text(letter, cx - 1, y + 3, col(b, '#f4f1e8'));
+      R(cx, y - 7, 1, 7, metal);
+      const a = b.dishA ?? b.seed, k = Math.cos(a), half = Math.max(1, Math.round(Math.abs(k) * 4));
+      const face = k >= 0 ? col(b, '#e8ecf5') : col(b, '#9aa0a8');
+      R(cx - half, y - 11, half * 2 + 1, 1, face);
+      if (half > 1) R(cx - half + 1, y - 10, half * 2 - 1, 1, shade(face, -0.15));
+      R(cx, y - 9, 1, 2, shade(face, -0.3));
+      R(cx + Math.round(Math.sin(a) * 2), y - 14, 1, 2, metal);
+      door(b, x);
+    },
+    glow(b, x, y, t, env, dt) {
+      b.dishA = (b.dishA ?? b.seed) + dt * (0.25 + Math.min(4, (b.c.netRx + b.c.netTx) / 30e3));
+      if (Math.floor(t * 1.5 + b.seed) % 2) {
+        g.globalAlpha = 0.5 + 0.5 * env.night;
+        R(x + (b.w >> 1) + Math.round(Math.sin(b.dishA) * 2), y - 15, 1, 1, '#8fe388');
+      }
+    },
+  },
 };
 
 function clockHands(cx, cy, c) {
@@ -816,7 +852,7 @@ function makeBuilding(c) {
 }
 
 // Tall things grow into the available sky so the city doesn't look lost on wide screens.
-const GROWTH = { tower: 1, office: 1, lighthouse: 1, watchtower: 1, silo: 0.35 };
+const GROWTH = { tower: 1, office: 1, studio: 0.7, lighthouse: 1, watchtower: 1, silo: 0.35 };
 let heightBoost = 1;
 
 function applySize(b) {
