@@ -1,5 +1,7 @@
 services:
   homelab-world:
+    build: .
+    image: homelab-world:dev
     environment:
       WEB_DIR: /web
     volumes:

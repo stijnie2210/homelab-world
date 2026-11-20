@@ -1,7 +1,6 @@
 services:
   homelab-world:
-    build: .
-    image: homelab-world:latest
+    image: ghcr.io/stijnie2210/homelab-world:latest
     container_name: homelab-world
     restart: unless-stopped
     ports:

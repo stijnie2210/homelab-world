@@ -12,19 +12,28 @@ Your Docker containers as a living pixel city. Every compose project is a distri
 - **Time of day** follows real time, with sky, sun, moon, stars and street lights.
 - **Big stacks**: when the city is wider than the screen, the camera drifts slowly along the street and flies to a building when something happens to it. A minimap in the corner shows the whole city, with stopped and unhealthy containers in red.
 
-## Try it without Docker
+## Try it first
 
-Open `web/index.html?demo` straight from disk, or `http://localhost:8099/?demo` on a running instance. Demo mode makes up a homelab of 36 containers in the browser, with streams, restarts, crashes and Pi-hole rain. Use `?demo=120` to see a bigger stack.
+Demo mode makes up a homelab of 36 containers in the browser, with streams, restarts, crashes and Pi-hole rain, so it needs no access to your Docker at all:
+
+```sh
+docker run --rm -p 8099:8099 ghcr.io/stijnie2210/homelab-world
+open "http://localhost:8099/?demo"
+```
+
+Use `?demo=120` to see a bigger stack. Without Docker, open `web/index.html?demo` straight from a checkout.
 
 ## Run
 
+Download [`compose.yaml`](compose.yaml) (and [`.env.example`](.env.example) if you want Pi-hole rain), then:
+
 ```sh
 cp .env.example .env   # optional, for Pi-hole rain
-docker compose up -d --build
+docker compose up -d
 open http://localhost:8099
 ```
 
-The backend is one stdlib-only Go binary with the frontend embedded.
+The image is built for amd64 and arm64 (a Raspberry Pi works), about 10 MB, and runs as an unprivileged user. The backend is one stdlib-only Go binary with the frontend embedded.
 
 On Linux, first put the id of the `docker` group in `.env` (see [Docker access](#docker-access)):
 
@@ -47,7 +56,7 @@ That matters because mounting the socket with `:ro` does not make the Docker API
 
 The proxy runs as an unprivileged user in the group that owns the socket. That's group `0` on OrbStack (the default) and the `docker` group on Linux, which is why Linux needs `DOCKER_GID` in `.env`. On Docker Desktop, check with `docker run --rm -v /var/run/docker.sock:/s alpine stat -c %g /s`. If the proxy can't reach the socket or refuses a request, the page says so in a red banner, and `docker logs homelab-world-socket-proxy` shows the refused paths.
 
-Already running a socket proxy? Point `DOCKER_HOST` at it and allow the four requests above. With `tecnativa/docker-socket-proxy` that's `CONTAINERS=1` (`EVENTS` and `PING` are on by default), although that also opens container logs and file downloads. To skip the proxy, mount the socket and set `DOCKER_HOST=unix:///var/run/docker.sock`.
+Already running a socket proxy? Point `DOCKER_HOST` at it and allow the four requests above. With `tecnativa/docker-socket-proxy` that's `CONTAINERS=1` (`EVENTS` and `PING` are on by default), although that also opens container logs and file downloads. To skip the proxy, mount the socket, set `DOCKER_HOST=unix:///var/run/docker.sock`, and run the container in the socket's group with `user: "65534:${DOCKER_GID:-0}"` (the image runs as an unprivileged user).
 
 | Variable | Default | |
 |---|---|---|
@@ -125,3 +134,15 @@ dev/fixtures.sh down                                               # remove them
 ```
 
 With `compose.dev.yaml`, a browser refresh is enough to see frontend changes; Go changes need the `--build`. The fixtures are named after common apps, a few have (failing) health checks or CPU bursts, and two show the labels. Building kinds live in `KINDS` in `web/world.js`, the matching rules in `KIND_RULES`.
+
+## Releasing
+
+Every push to `main` publishes `ghcr.io/stijnie2210/homelab-world:main` and `:sha-<commit>`. A tag like `v0.1.0` publishes `:0.1.0`, `:0.1` and `:latest`, which is what `compose.yaml` pulls:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+## License
+
+[MIT](LICENSE)

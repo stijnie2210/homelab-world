@@ -1,0 +1,7 @@
+.git
+.github
+.env
+dev
+*.md
+LICENSE
+compose*.yaml
