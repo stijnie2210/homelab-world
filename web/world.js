@@ -4,7 +4,9 @@
 // All art is drawn at a low logical resolution and scaled up with nearest-neighbour.
 //
 // URL params:  ?hour=21  freeze time of day   ?speed=600  fast-forward the day   ?scale=4  force pixel size
+//              ?fit  shrink until the whole city fits instead of panning   ?demo[=N]  made-up homelab (demo.js)
 // Keys:        N  cycle day/dusk/night/dawn/live    D  fire a demo event (and some Pi-hole rain)
+//              arrows  pan a city that is wider than the screen (so do drag and the scroll wheel)
 // Double-click toggles fullscreen.
 
 const params = new URLSearchParams(location.search);
@@ -600,11 +602,60 @@ function layout() {
   contentWidth = Math.max(160, x - DISTRICT_GAP + MARGIN * 2);
 }
 
+// Building x positions are world coordinates. A city that fits is centred on screen; a wider one
+// starts at the left edge of the world and the camera pans across it.
 function position() {
-  const off = Math.max(MARGIN, Math.floor((W - contentWidth) / 2) + MARGIN);
+  const off = contentWidth <= W ? Math.floor((W - contentWidth) / 2) + MARGIN : MARGIN;
   for (const b of buildings) b.x = b.rx + off;
   for (const d of districts) { d.x0 = d.rx0 + off; d.x1 = d.rx1 + off; }
+  cam.max = Math.max(0, contentWidth - W);
+  cam.x = clamp(cam.x, 0, cam.max);
+  cam.target = clamp(cam.target, 0, cam.max);
+  display.classList.toggle('pannable', cam.max > 0);
 }
+
+// ---------- camera ----------
+
+// Drifts slowly across a wide city, flies to a building when something happens to it, and
+// leaves the steering to you for a while after you drag, scroll or press an arrow key.
+const cam = { x: 0, target: 0, max: 0, dir: 1, pauseUntil: 0, holdUntil: 0, manualUntil: 0, dragging: null };
+const DRIFT = 7; // logical pixels per second
+const clock = () => performance.now() / 1000;
+
+function updateCamera(dt, t) {
+  if (cam.max <= 0) {
+    cam.x = cam.target = 0;
+    return;
+  }
+  if (!cam.dragging && t > cam.holdUntil && t > cam.manualUntil && t > cam.pauseUntil) {
+    cam.target += cam.dir * DRIFT * dt;
+    if (cam.target <= 0 || cam.target >= cam.max) {
+      cam.dir = cam.target <= 0 ? 1 : -1;
+      cam.pauseUntil = t + 6;
+    }
+  }
+  cam.target = clamp(cam.target, 0, cam.max);
+  cam.x += (cam.target - cam.x) * Math.min(1, dt * 3);
+}
+
+function focusOn(b) {
+  const t = clock();
+  if (cam.max <= 0 || t < cam.manualUntil) return;
+  cam.target = clamp(b.x + b.w / 2 - W / 2, 0, cam.max);
+  cam.holdUntil = t + 12;
+}
+
+function panBy(dx, smooth) {
+  cam.target = clamp(cam.target + dx, 0, cam.max);
+  if (!smooth) cam.x = cam.target;
+  cam.manualUntil = clock() + 30;
+}
+
+// Draw in world coordinates (shifted by the camera) or in screen coordinates.
+let camI = 0;
+const inWorld = () => g.setTransform(1, 0, 0, 1, -camI, 0);
+const onScreen = () => g.setTransform(1, 0, 0, 1, 0, 0);
+const visible = (b) => b.x + b.w + 24 >= camI && b.x - 24 <= camI + W;
 
 // ---------- world state ----------
 
@@ -648,7 +699,10 @@ function onEvent(e) {
   ticker.unshift({ msg: `${hhmm} ${e.name} ${VERB[e.action] ?? e.action}`, bad: ['die', 'oom', 'unhealthy'].includes(e.action) });
   ticker.length = Math.min(ticker.length, 3);
   const b = buildingCache.get(e.name);
-  if (b && buildings.includes(b)) burst(b, e.action);
+  if (b && buildings.includes(b)) {
+    burst(b, e.action);
+    focusOn(b);
+  }
 }
 
 function onSnapshot(m) {
@@ -676,6 +730,13 @@ function onSnapshot(m) {
 }
 
 function connect() {
+  if (params.has('demo')) {
+    state.connected = true;
+    state.demo = true;
+    const n = parseInt(params.get('demo'), 10);
+    startDemo({ onSnapshot, onEvent, count: n > 0 ? Math.min(n, 400) : 36 });
+    return;
+  }
   const es = new EventSource('api/stream');
   es.onopen = () => (state.connected = true);
   es.onerror = () => (state.connected = false);
@@ -692,8 +753,11 @@ function connect() {
 function resize() {
   const dpr = window.devicePixelRatio || 1;
   const pw = Math.floor(innerWidth * dpr), ph = Math.floor(innerHeight * dpr);
+  // Shrink the pixels until the city fits, but only down to about 450 logical pixels on the short side:
+  // below that a big stack turns into specks, so a wider city pans instead (unless ?fit).
+  const minScale = params.has('fit') ? 1 : Math.max(1, Math.ceil(Math.min(ph, pw) / 450));
   let s = params.has('scale') ? parseInt(params.get('scale'), 10) : Math.max(1, Math.floor(ph / 190));
-  if (!params.has('scale')) while (s > 1 && Math.ceil(pw / s) < contentWidth) s--;
+  if (!params.has('scale')) while (s > minScale && Math.ceil(pw / s) < contentWidth) s--;
   S = s;
   W = Math.ceil(pw / s);
   H = Math.ceil(ph / s);
@@ -712,15 +776,17 @@ function resize() {
     const puffs = Array.from({ length: 3 + Math.floor(r() * 3) }, (_, k) => ({ dx: k * 6 + Math.floor(r() * 3), dy: Math.floor(r() * 3) - 1, r: 3 + Math.floor(r() * 3) }));
     return { x: r() * W, y: 12 + r() * (GROUND * 0.35), v: 1.5 + r() * 3, puffs, seed: i };
   });
-  // a hazy far-away skyline that isn't backed by any container
+  // a hazy far-away skyline that isn't backed by any container; it scrolls at a third of the
+  // camera speed, so it has to be a bit wider than the screen
+  const worldW = Math.max(W, contentWidth);
   skyline = [];
-  for (let x = -4; x < W; ) {
+  for (let x = -4; x < W + cam.max / 3 + 4; ) {
     const w = 8 + Math.floor(r() * 14);
     const h = Math.floor((14 + r() * 46) * heightBoost * 0.8);
     skyline.push({ x, w, h, lights: Array.from({ length: Math.floor((w * h) / 90) }, () => ({ x: 2 + Math.floor(r() * (w - 4)), y: 3 + Math.floor(r() * (h - 6)), p: r() })) });
     x += w + Math.floor(r() * 3) - 1;
   }
-  grass = Array.from({ length: Math.floor(W / 3) }, () => ({ x: Math.floor(r() * W), y: GROUND + 15 + Math.floor(r() * 31), c: r() < 0.5 ? '#26402c' : '#365a3c' }));
+  grass = Array.from({ length: Math.floor(worldW / 3) }, () => ({ x: Math.floor(r() * worldW), y: GROUND + 15 + Math.floor(r() * 31), c: r() < 0.5 ? '#26402c' : '#365a3c' }));
 }
 
 // ---------- simulation ----------
@@ -736,8 +802,9 @@ function domeY(x) {
 
 function update(dt, t) {
   // traffic: cars leave a building for outgoing bytes, arrive for incoming
+  // (only for buildings on screen: in a wide city the car limit would otherwise go to streets nobody sees)
   for (const b of buildings) {
-    if (b.dead || cars.length > 22) continue;
+    if (b.dead || cars.length > 22 || !visible(b)) continue;
     const cx = b.x + (b.w >> 1);
     if (Math.random() < dt * carRate(b.c.netTx)) {
       const dir = Math.random() < 0.5 ? -1 : 1;
@@ -745,14 +812,15 @@ function update(dt, t) {
     }
     if (Math.random() < dt * carRate(b.c.netRx)) {
       const dir = Math.random() < 0.5 ? -1 : 1;
-      cars.push({ x: dir > 0 ? -8 : W + 8, dir, v: 18 + Math.random() * 16, c: b.color, target: cx });
+      const from = dir > 0 ? Math.min(camI - 8, cx - 60) : Math.max(camI + W + 8, cx + 60);
+      cars.push({ x: from, dir, v: 18 + Math.random() * 16, c: b.color, target: cx });
     }
   }
   for (let i = cars.length - 1; i >= 0; i--) {
     const car = cars[i];
     car.x += car.dir * car.v * dt;
     const arrived = car.target != null && (car.dir > 0 ? car.x >= car.target : car.x <= car.target);
-    if (arrived || car.x < -12 || car.x > W + 12) cars.splice(i, 1);
+    if (arrived || car.x < camI - W || car.x > camI + 2 * W) cars.splice(i, 1);
   }
 
   // window flicker: busier containers flick lights on and off more often
@@ -787,8 +855,8 @@ function update(dt, t) {
     if (d.y >= floor) {
       drops.splice(i, 1);
       if (shield) flashes.push({ x: d.x, life: 0.5 });
-      for (let k = 0; k < 3; k++) {
-        particles.push({ x: d.x, y: floor, vx: (Math.random() - 0.5) * 30, vy: -10 - Math.random() * 15, life: 0.4, max: 0.4, c: '#ff8a9a', s: 1, grav: 80 });
+      for (let k = 0; k < 3; k++) { // particles live in world coordinates, rain on screen
+        particles.push({ x: d.x + camI, y: floor, vx: (Math.random() - 0.5) * 30, vy: -10 - Math.random() * 15, life: 0.4, max: 0.4, c: '#ff8a9a', s: 1, grav: 80 });
       }
     }
   }
@@ -851,24 +919,29 @@ function drawSky(env, t) {
 
   const far = mix(horizon, top, 0.45);
   const farLit = mix(far, '#ffd98a', 0.55);
+  const shift = Math.round(camI / 3);
   for (const s of skyline) {
-    R(s.x, GROUND - s.h, s.w, s.h, far);
+    const sx = s.x - shift;
+    if (sx + s.w < 0 || sx > W) continue;
+    R(sx, GROUND - s.h, s.w, s.h, far);
     if (env.night > 0.3) {
       g.globalAlpha = (env.night - 0.3) / 0.7;
-      for (const l of s.lights) if (l.p < 0.45) R(s.x + l.x, GROUND - s.h + l.y, 1, 1, farLit);
+      for (const l of s.lights) if (l.p < 0.45) R(sx + l.x, GROUND - s.h + l.y, 1, 1, farLit);
       g.globalAlpha = 1;
     }
   }
 }
 
 function drawGround() {
+  onScreen();
   R(0, GROUND, W, 2, '#9a9aa6');
   R(0, GROUND + 2, W, 1, '#6b6b78');
   R(0, GROUND + 3, W, 11, '#3b3b48');
-  for (let x = 0; x < W; x += 8) R(x, GROUND + 8, 4, 1, '#d8d0a0');
   R(0, GROUND + 14, W, 1, '#6b6b78');
   R(0, GROUND + 15, W, H - GROUND - 15, '#2d4a33');
-  for (const p of grass) R(p.x, p.y, 1, 1, p.c);
+  inWorld();
+  for (let x = Math.floor(camI / 8) * 8; x < camI + W; x += 8) R(x, GROUND + 8, 4, 1, '#d8d0a0');
+  for (const p of grass) if (p.x >= camI && p.x < camI + W) R(p.x, p.y, 1, 1, p.c);
   for (const d of lamps()) {
     R(d, GROUND - 14, 1, 14, '#4a4a56');
     R(d - 1, GROUND - 15, 3, 1, '#4a4a56');
@@ -897,7 +970,9 @@ function drawCars() {
 }
 
 function drawBuildings(t) {
+  inWorld();
   for (const b of buildings) {
+    if (!visible(b)) continue;
     const x = b.x, y = GROUND - b.h;
     b.spec.draw(b, x, y, t);
     for (const w of b.windows) R(x + w.x, y + w.y, w.w, w.h, b.dead ? '#4a3a30' : '#26304a');
@@ -909,7 +984,9 @@ function drawBuildings(t) {
 }
 
 function drawGlow(env, t, dt) {
+  inWorld();
   for (const b of buildings) {
+    if (!visible(b)) continue;
     const x = b.x, y = GROUND - b.h;
     if (!b.dead && b.c.state !== 'paused') {
       const lit = 0.2 + 0.7 * Math.min(1, b.c.cpu / 40);
@@ -948,7 +1025,8 @@ function drawGlow(env, t, dt) {
     R(car.dir > 0 ? x - 1 : x + 7, y, 1, 1, '#ff4b4b');
   }
 
-  // pi-hole shield
+  // pi-hole shield (the shield and the rain hang over the screen, not over the world)
+  onScreen();
   if (state.pihole) {
     g.globalAlpha = 0.05 + 0.05 * env.night;
     for (let x = 0; x < W; x++) R(x, domeY(x), 1, 1, '#8ff3ff');
@@ -962,6 +1040,7 @@ function drawGlow(env, t, dt) {
   g.globalAlpha = 1;
   for (const d of drops) R(d.x, d.y, 1, 2, '#ff5d73');
 
+  inWorld();
   for (const p of particles) {
     g.globalAlpha = clamp(p.life / p.max, 0, 1);
     if (p.text) text(p.text, p.x, p.y, p.c);
@@ -973,14 +1052,41 @@ function drawGlow(env, t, dt) {
     const ax = hovered.x + (hovered.w >> 1), ay = GROUND - hovered.h - hovered.extra - 8 + Math.round(Math.sin(t * 4));
     R(ax - 2, ay, 5, 1, '#ffd86b'); R(ax - 1, ay + 1, 3, 1, '#ffd86b'); R(ax, ay + 2, 1, 1, '#ffd86b');
   }
+  onScreen();
 }
 
-function drawHud(env) {
+// A tiny skyline of the whole city with a frame around what's on screen; only for a city
+// that's wider than the screen. Stopped and unhealthy containers show up red in it.
+function drawMinimap(t) {
+  if (cam.max <= 0 || !buildings.length) return;
+  const mw = Math.min(140, Math.floor(W * 0.3)), x0 = W - mw - 6, base = H - 4;
+  const k = mw / contentWidth, tallest = Math.max(...buildings.map((b) => b.h));
+  const blink = Math.floor(t * 2) % 2;
+  for (const b of buildings) {
+    const bad = b.dead || b.c.health === 'unhealthy';
+    const h = Math.max(1, Math.round((b.h / tallest) * 8));
+    g.globalAlpha = bad ? (blink ? 1 : 0.5) : 0.75;
+    R(x0 + b.x * k, base - h, Math.max(1, Math.round(b.w * k)), h, bad ? '#ff4b4b' : b.color);
+  }
+  g.globalAlpha = 0.8;
+  const vx = x0 + Math.round(camI * k), vw = Math.max(3, Math.round(W * k));
+  R(vx, base - 10, vw, 1, '#c8d0ff');
+  R(vx, base + 1, vw, 1, '#c8d0ff');
+  R(vx, base - 10, 1, 12, '#c8d0ff');
+  R(vx + vw - 1, base - 10, 1, 12, '#c8d0ff');
+  g.globalAlpha = 1;
+}
+
+function drawHud(env, t) {
+  inWorld();
   for (const d of districts) {
+    if (d.x1 < camI || d.x0 > camI + W) continue;
     const max = Math.max(1, Math.floor((d.x1 - d.x0 + DISTRICT_GAP) / 4));
     const label = d.name.length > max ? d.name.slice(0, max - 1) + '.' : d.name;
     text(label, Math.floor((d.x0 + d.x1 - textWidth(label)) / 2), GROUND + 18, '#8fb48a');
   }
+  onScreen();
+  drawMinimap(t);
   ticker.forEach((e, i) => {
     g.globalAlpha = 1 - i * 0.3;
     text(e.msg, 6, GROUND + 25 + i * 7, e.bad ? '#ff8a8a' : '#e8e8f0');
@@ -998,8 +1104,8 @@ function drawHud(env) {
   text(s1, x0, 6, env.night > 0.5 ? '#8fe388' : '#24602a');
   if (down) text(s2, x0 + textWidth(s1) + 1, 6, '#ff6b6b');
 
-  if (!state.connected) {
-    const msg = 'connecting...';
+  if (!state.connected || state.demo) {
+    const msg = state.demo ? 'demo' : 'connecting...';
     text(msg, (W - textWidth(msg)) >> 1, 6, '#ffd86b');
   }
 }
@@ -1012,20 +1118,27 @@ function loop(now) {
   const hour = currentHour();
   const env = { hour, night: nightAt(hour), golden: goldenAt(hour) };
 
+  updateCamera(dt, t);
+  camI = Math.round(cam.x);
   update(dt, t);
 
   g = fctx;
   g.globalAlpha = 1;
+  onScreen();
   drawSky(env, t);
+  inWorld();
   for (const b of buildings) if (!b.dead && b.spec.sky) b.spec.sky(b, b.x, GROUND - b.h, t, env);
+  onScreen();
   g.globalAlpha = 1;
 
   // buildings, ground and cars go on their own layer so the night tint only touches them, not the sky
   g = lctx;
+  onScreen();
   g.clearRect(0, 0, W, H);
   drawGround();
   drawBuildings(t);
   drawCars();
+  onScreen();
   g.globalCompositeOperation = 'source-atop';
   if (env.night > 0) { g.globalAlpha = 0.62 * env.night; R(0, 0, W, H, '#12142e'); }
   if (env.golden > 0) { g.globalAlpha = 0.14 * env.golden; R(0, 0, W, H, '#ff8a50'); }
@@ -1035,7 +1148,7 @@ function loop(now) {
   g = fctx;
   g.drawImage(layer, 0, 0);
   drawGlow(env, t, dt);
-  drawHud(env);
+  drawHud(env, t);
 
   dctx.imageSmoothingEnabled = false;
   dctx.drawImage(frame, 0, 0, W * S, H * S);
@@ -1044,24 +1157,60 @@ function loop(now) {
 
 // ---------- interaction ----------
 
-display.addEventListener('mousemove', (e) => {
-  const dpr = window.devicePixelRatio || 1;
-  const lx = (e.clientX * dpr) / S, ly = (e.clientY * dpr) / S;
+const toLogical = (px) => (px * (window.devicePixelRatio || 1)) / S;
+
+function showTip(e) {
+  const lx = toLogical(e.clientX) + camI, ly = toLogical(e.clientY);
   hovered = buildings.find((b) => lx >= b.x - 2 && lx < b.x + b.w + 2 && ly >= GROUND - b.h - b.extra - 3 && ly <= GROUND) || null;
   if (!hovered) { tip.hidden = true; return; }
   const c = hovered.c;
-  const health = c.health ? ` <span class="${c.health === 'healthy' ? 'ok' : c.health === 'unhealthy' ? 'bad' : 'meh'}">${c.health}</span>` : '';
+  const health = c.health ? ` <span class="${c.health === 'healthy' ? 'ok' : c.health === 'unhealthy' ? 'bad' : 'meh'}">${esc(c.health)}</span>` : '';
   const stateCls = c.state === 'running' ? 'ok' : c.state === 'exited' ? 'bad' : 'meh';
-  tip.innerHTML = `<b>${c.name}</b>`
-    + `<span class="${stateCls}">${c.state}</span>${health}<br>`
+  tip.innerHTML = `<b>${esc(c.name)}</b>`
+    + `<span class="${stateCls}">${esc(c.state)}</span>${health}<br>`
     + (c.state === 'running' ? `cpu ${c.cpu.toFixed(1)}%  ·  mem ${fmtBytes(c.mem)}<br>net ↓${fmtBytes(c.netRx)}/s ↑${fmtBytes(c.netTx)}/s<br>` : '')
-    + `<span class="dim">${c.project || 'standalone'} · ${c.image}</span>`;
+    + `<span class="dim">${esc(c.project || 'standalone')} · ${esc(c.image)}</span>`;
   tip.hidden = false;
   const tx = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8);
   const ty = Math.max(8, e.clientY - tip.offsetHeight - 14);
   tip.style.left = tx + 'px';
   tip.style.top = ty + 'px';
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+
+// Drag (mouse or finger) and the scroll wheel pan a city that's wider than the screen.
+display.addEventListener('pointerdown', (e) => {
+  if (cam.max <= 0) return;
+  cam.dragging = { x: e.clientX, moved: false };
+  display.setPointerCapture(e.pointerId);
 });
+display.addEventListener('pointermove', (e) => {
+  if (cam.dragging) {
+    const dx = e.clientX - cam.dragging.x;
+    if (Math.abs(dx) > 2) cam.dragging.moved = true;
+    if (cam.dragging.moved) {
+      cam.dragging.x = e.clientX;
+      panBy(-toLogical(dx), false);
+      display.classList.add('dragging');
+      tip.hidden = true;
+      return;
+    }
+  }
+  if (e.pointerType === 'mouse') showTip(e);
+});
+const endDrag = () => {
+  cam.dragging = null;
+  display.classList.remove('dragging');
+};
+display.addEventListener('pointerup', endDrag);
+display.addEventListener('pointercancel', endDrag);
+display.addEventListener('wheel', (e) => {
+  if (cam.max <= 0) return;
+  e.preventDefault();
+  panBy(toLogical(Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY), false);
+  tip.hidden = true;
+}, { passive: false });
 display.addEventListener('mouseleave', () => { hovered = null; tip.hidden = true; });
 display.addEventListener('dblclick', () => {
   if (document.fullscreenElement) document.exitFullscreen();
@@ -1070,6 +1219,7 @@ display.addEventListener('dblclick', () => {
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'n' || e.key === 'N') forcedIdx = (forcedIdx + 1) % FORCED.length;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') panBy((e.key === 'ArrowLeft' ? -1 : 1) * W * 0.4, true);
   if ((e.key === 'd' || e.key === 'D') && buildings.length) {
     const b = buildings[Math.floor(Math.random() * buildings.length)];
     const action = ['start', 'die', 'restart', 'oom', 'healthy', 'unhealthy'][Math.floor(Math.random() * 6)];

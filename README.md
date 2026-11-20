@@ -10,6 +10,11 @@ Your Docker containers as a living pixel city. Every compose project is a distri
 - **Events** like start, stop, OOM and health changes trigger confetti, smoke and a ticker line.
 - **Pi-hole** (optional): every blocked query is a drop of rain bouncing off a shield over the city.
 - **Time of day** follows real time, with sky, sun, moon, stars and street lights.
+- **Big stacks**: when the city is wider than the screen, the camera drifts slowly along the street and flies to a building when something happens to it. A minimap in the corner shows the whole city, with stopped and unhealthy containers in red.
+
+## Try it without Docker
+
+Open `web/index.html?demo` straight from disk, or `http://localhost:8099/?demo` on a running instance. Demo mode makes up a homelab of 36 containers in the browser, with streams, restarts, crashes and Pi-hole rain. Use `?demo=120` to see a bigger stack.
 
 ## Run
 
@@ -28,9 +33,12 @@ It reads the Docker socket read-only. The backend is one stdlib-only Go binary w
 | `N` | cycle day / dusk / night / dawn / live |
 | `D` | fire a random demo event, plus some rain |
 | double-click | fullscreen (good for a wall tablet) |
+| drag, scroll, `←` `→` | pan a city that's wider than the screen; the camera leaves you alone for 30 seconds |
 | `?hour=21` | freeze the time of day |
 | `?speed=600` | fast-forward the day |
 | `?scale=4` | force pixel size |
+| `?fit` | shrink the pixels until the whole city fits, instead of panning |
+| `?demo`, `?demo=120` | made-up homelab, no Docker needed |
 
 ## Hacking on the frontend
 
