@@ -1410,7 +1410,7 @@ function drawHud(env, t) {
   inWorld();
   for (const d of districts) {
     if (d.x1 < camI || d.x0 > camI + W) continue;
-    const max = Math.max(1, Math.floor((d.x1 - d.x0 + DISTRICT_GAP) / 4));
+    const max = Math.max(1, Math.floor((d.x1 - d.x0 + DISTRICT_GAP - 6) / 4));
     const label = d.name.length > max ? d.name.slice(0, max - 1) + '.' : d.name;
     text(label, Math.floor((d.x0 + d.x1 - textWidth(label)) / 2), GROUND + 18, '#8fb48a');
   }

@@ -88,7 +88,7 @@ func (d *dockerClient) get(ctx context.Context, path string, v any) error {
 	}
 	resp, err := d.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("can't reach Docker at %s: %w", d.host, err)
+		return d.unreachable(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -256,7 +256,7 @@ func (d *dockerClient) watchEvents(ctx context.Context, emit func(DockerEvent)) 
 		resp, err := d.http.Do(req)
 		switch {
 		case err != nil:
-			report(fmt.Errorf("can't reach Docker at %s: %w", d.host, err))
+			report(d.unreachable(err))
 		case resp.StatusCode != http.StatusOK:
 			report(apiError(req, resp))
 			resp.Body.Close()
@@ -320,4 +320,11 @@ func firstOr(s []string, def string) string {
 		return s[0]
 	}
 	return def
+}
+
+func (d *dockerClient) unreachable(err error) error {
+	if strings.HasPrefix(d.host, "unix://") {
+		return fmt.Errorf("can't reach Docker at %s: %w", d.host, err)
+	}
+	return fmt.Errorf("can't reach Docker at %s. With the bundled socket proxy, docker logs homelab-world-socket-proxy says why; on Linux it usually needs DOCKER_GID in .env (see the README). Error: %w", d.host, err)
 }
