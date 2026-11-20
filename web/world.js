@@ -200,7 +200,8 @@ const KIND_RULES = [
   ['silo', /[-_]db\b|database|postgres|mysql|mariadb|mongo|redis|valkey|dragonfly|keydb|influx|timescale|clickhouse|elasticsearch|opensearch|meilisearch|typesense|couchdb|etcd/],
   ['bunker', /socket-?proxy|gluetun|wireguard|wg-easy|vpn|tailscale|headscale|netbird|zerotier|cloudflared|crowdsec|fail2ban/],
   ['crane', /portainer|watchtower|diun|whats-?up-?docker|\bwud\b|komodo|dockge|yacht|dockhand/],
-  ['studio', /sonarr|radarr|lidarr|readarr|whisparr|prowlarr|bazarr|mylar|seerr|ombi|recyclarr|unpackerr|notifiarr|autobrr|cross-seed|jackett|nzbhydra/],
+  ['boxoffice', /seerr|ombi|doplarr|requestrr/],
+  ['studio', /sonarr|radarr|lidarr|readarr|whisparr|prowlarr|bazarr|mylar|recyclarr|unpackerr|notifiarr|autobrr|cross-seed|jackett|nzbhydra/],
   ['cinema', /jellyfin|plex|emby|navidrome|airsonic|funkwhale|jellystat/],
   ['lighthouse', /pihole|pi-hole|adguard|blocky|technitium/],
   ['antenna', /unbound|dnsmasq|coredns|bind9|powerdns/],
@@ -785,6 +786,50 @@ const KINDS = {
     glow(b, x, y, t, env) {
       g.globalAlpha = 0.35 + 0.65 * env.night;
       text('OPEN', x + ((b.w - textWidth('OPEN')) >> 1), y - 6, '#ff6b9a');
+    },
+  },
+
+  boxoffice: {
+    size: () => [30, 18], extra: 9, color: '#7b5cd6',
+    windows: () => [],
+    draw(b, x, y) {
+      const c = col(b, b.color), skin = col(b, '#d9a066'), gold = col(b, '#d4a83a');
+      R(x, y, b.w, b.h, c);
+      R(x + b.w - 2, y, 2, b.h, shade(c, -0.3));
+      R(x - 1, y - 8, b.w + 2, 8, col(b, '#2b1b2e'));
+      R(x + 4, y + 4, 9, 7, col(b, '#26304a'));
+      R(x + 8, y + 6, 2, 2, skin);
+      R(x + 7, y + 8, 4, 3, col(b, '#c0392b'));
+      R(x + 3, y + 11, 11, 1, shade(c, 0.3));
+      R(x + b.w - 9, GROUND - 7, 5, 7, col(b, '#1a1220'));
+      R(x + 1, GROUND - 4, 1, 4, gold);
+      R(x + 15, GROUND - 4, 1, 4, gold);
+      R(x + 2, GROUND - 3, 13, 1, col(b, '#a83a4a'));
+    },
+    glow(b, x, y, t, env) {
+      g.globalAlpha = 0.1 + 0.4 * env.night;
+      R(x + 4, y + 4, 9, 7, '#ffd98a');
+      g.globalAlpha = env.night;
+      R(x + 8, y + 6, 2, 2, '#2a1f2e');
+      R(x + 7, y + 8, 4, 3, '#2a1f2e');
+      g.globalAlpha = 1;
+      text('TICKETS', x + ((b.w - textWidth('TICKETS')) >> 1), y - 6, '#ffd86b');
+      g.globalAlpha = 0.45 + 0.55 * env.night;
+      const step = Math.floor(t * 5);
+      for (let i = 0; i < (b.w + 2) / 2; i++) {
+        const on = (i + step) % 3 === 0;
+        R(x - 1 + i * 2, y - 8, 1, 1, on ? '#fff1b0' : '#6a4a3a');
+        R(x + b.w - i * 2, y - 1, 1, 1, on ? '#fff1b0' : '#6a4a3a');
+      }
+      g.globalAlpha = 1;
+      const queue = Math.min(4, Math.floor((b.c.netRx + b.c.netTx) / 15e3) + (b.c.cpu > 2 ? 1 : 0));
+      const coats = ['#5b6ee1', '#37946e', '#d77bba', '#e6b83c'];
+      for (let i = 0; i < queue; i++) {
+        const px = x + 3 + i * 3, bob = Math.floor(t * 2 + i) % 4 === 0 ? 1 : 0;
+        R(px, GROUND - 6 - bob, 1, 1, '#d9a066');
+        R(px, GROUND - 5 - bob, 1, 3, coats[(i + b.seed) % coats.length]);
+        R(px, GROUND - 2, 1, 2, '#2a1f2e');
+      }
     },
   },
 

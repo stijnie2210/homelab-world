@@ -36,7 +36,8 @@ The building is picked from the container's name and image. The first match in t
 | `silo` | silo | Postgres, MariaDB, MySQL, Redis, Valkey, InfluxDB, Elasticsearch, names ending in `-db` |
 | `bunker` | bunker | socket proxies, Gluetun, WireGuard, Tailscale, Cloudflared, CrowdSec |
 | `crane` | construction crane | Portainer, Watchtower, Diun, Komodo, Dockge |
-| `studio` | broadcast studio in the app's colour, with its letter on the front and a dish that turns with the traffic | Sonarr, Radarr, Lidarr, Readarr, Prowlarr, Bazarr, Seerr, Jackett, Autobrr |
+| `studio` | broadcast studio in the app's colour, with its letter on the front and a dish that turns with the traffic | Sonarr, Radarr, Lidarr, Readarr, Prowlarr, Bazarr, Jackett, Autobrr |
+| `boxoffice` | box office with a marquee, a queue forms with the traffic | Seerr, Overseerr, Jellyseerr, Ombi |
 | `cinema` | cinema, searchlight while streaming | Jellyfin, Plex, Emby, Navidrome |
 | `lighthouse` | lighthouse | Pi-hole, AdGuard Home, Blocky |
 | `antenna` | radio mast | Unbound, dnsmasq, CoreDNS |
