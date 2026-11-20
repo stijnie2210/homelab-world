@@ -191,22 +191,41 @@ const PALETTE = ['#5b6ee1', '#306082', '#76428a', '#8f563b', '#37946e', '#524b24
 const BRAND = {
   sonarr: '#2f9fd8', radarr: '#d9a51e', prowlarr: '#d9622b', lidarr: '#2f8f5a', bazarr: '#6c8a3a',
   seerr: '#7b5cd6', flaresolverr: '#c9733a', postgres: '#3d6b99', redis: '#b5413a', valkey: '#5a6fd6',
-  portainer: '#13a8d9', jellyfin: '#8f2d3a',
+  portainer: '#13a8d9', jellyfin: '#8f2d3a', plex: '#c98a1b', homeassistant: '#2a9fd6', 'home-assistant': '#2a9fd6',
+  grafana: '#e8700f', nextcloud: '#0082c9', vaultwarden: '#2f6fd6', bitwarden: '#2f6fd6', authentik: '#fd4b2d',
+  forgejo: '#d65a1f', gitea: '#609926', gitlab: '#e24329', paperless: '#2f7a3a', mealie: '#e58325', n8n: '#ea4b71',
 };
 
+// The first rule that matches the container's name or image decides its building. Order matters:
+// databases come before the apps they belong to (immich_postgres is a silo, not a gallery),
+// and socket proxies before reverse proxies.
+const KIND_RULES = [
+  ['lab', /machine.?learning|ollama|open-?webui|localai|whisper|comfyui|stable-?diffusion/],
+  ['silo', /[-_]db\b|database|postgres|mysql|mariadb|mongo|redis|valkey|dragonfly|keydb|influx|timescale|clickhouse|elasticsearch|opensearch|meilisearch|typesense|couchdb|etcd/],
+  ['bunker', /socket-?proxy|gluetun|wireguard|wg-easy|vpn|tailscale|headscale|netbird|zerotier|cloudflared|crowdsec|fail2ban/],
+  ['crane', /portainer|watchtower|diun|whats-?up-?docker|\bwud\b|komodo|dockge|yacht|dockhand/],
+  ['cinema', /jellyfin|plex|emby|navidrome|airsonic|funkwhale|jellystat/],
+  ['lighthouse', /pihole|pi-hole|adguard|blocky|technitium/],
+  ['antenna', /unbound|dnsmasq|coredns|bind9|powerdns/],
+  ['gallery', /immich|photoprism|librephotos|lychee|piwigo|pigallery/],
+  ['watchtower', /uptime|kuma|gatus|healthchecks|statping|frigate|scrypted|zoneminder|shinobi|motioneye/],
+  ['observatory', /grafana|prometheus|netdata|glances|loki|promtail|alloy|dozzle|cadvisor|node-?exporter|changedetection|speedtest|tautulli|scrutiny|beszel|victoria/],
+  ['house', /home-?assistant|homebridge|zigbee2mqtt|zwave|z-wave|esphome|node-?red|matter-?server|evcc/],
+  ['postoffice', /mosquitto|mqtt|rabbitmq|nats|kafka|redpanda|ntfy|gotify|apprise|mailu|mailcow|postfix|stalwart|roundcube|snappymail/],
+  ['bank', /vaultwarden|bitwarden|authentik|authelia|keycloak|zitadel|lldap|pocket-?id|passbolt|hashicorp\/vault|actual|firefly|ghostfolio|wallos/],
+  ['office', /nextcloud|owncloud|ocis|opencloud|seafile|onlyoffice|collabora|cryptpad|filebrowser|sftpgo/],
+  ['library', /paperless|calibre|kavita|komga|audiobookshelf|bookstack|wiki|outline|docmost|linkding|linkwarden|karakeep|hoarder|freshrss|miniflux|wallabag|readeck|memos|trilium|joplin|hedgedoc|silverbullet/],
+  ['factory', /forgejo|gitea|gitlab|woodpecker|drone|jenkins|runner|n8n|huginn|tdarr|unmanic|handbrake|stirling|gotenberg|tika|code-?server|renovate|kestra|windmill/],
+  ['townhall', /homepage|homarr|heimdall|dashy|organizr|glance|flame|homer/],
+  ['shop', /mealie|tandoor|grocy|kitchenowl|it-?tools|cyberchef|excalidraw|convertx|privatebin|shlink|yourls/],
+  ['warehouse', /qbittorrent|transmission|sabnzbd|deluge|nzbget|jdownloader|pyload|aria2|syncthing|minio|garage|duplicati|restic|kopia|borg|backrest|urbackup|rclone/],
+  ['gate', /nginx|caddy|traefik|haproxy|proxy|swag|zoraxy|pangolin/],
+];
+
 function kindOf(c) {
+  if (c.kind && KINDS[c.kind]) return c.kind; // the homelab-world.kind label
   const s = (c.name + ' ' + c.image).toLowerCase();
-  if (/jellyfin|plex|emby/.test(s)) return 'cinema';
-  if (/pihole|adguard/.test(s)) return 'lighthouse';
-  if (/machine.?learning/.test(s)) return 'lab';
-  if (/immich|photoprism/.test(s)) return 'gallery';
-  if (/postgres|mysql|mariadb|mongo|redis|valkey/.test(s)) return 'silo';
-  if (/gluetun|wireguard|vpn/.test(s)) return 'bunker';
-  if (/nginx|caddy|traefik|proxy/.test(s)) return 'gate';
-  if (/uptime|kuma|gatus/.test(s)) return 'watchtower';
-  if (/unbound|dnsmasq|coredns/.test(s)) return 'antenna';
-  if (/qbittorrent|transmission|sabnzbd|deluge/.test(s)) return 'warehouse';
-  if (/portainer/.test(s)) return 'crane';
+  for (const [kind, re] of KIND_RULES) if (re.test(s)) return kind;
   return 'tower';
 }
 
@@ -539,7 +558,258 @@ const KINDS = {
       }
     },
   },
+
+  // home automation: a house with solar panels and a smart light on the ridge
+  house: {
+    size: () => [22, 16], extra: 11, color: '#a8483c',
+    windows: (b) => [{ x: 3, y: 4, w: 4, h: 4 }, { x: b.w - 7, y: 4, w: 4, h: 4 }],
+    draw(b, x, y) {
+      const wall = col(b, '#e3d5b8'), roof = col(b, b.color), panel = col(b, '#2b3f6b');
+      R(x, y, b.w, b.h, wall);
+      R(x + b.w - 2, y, 2, b.h, shade(wall, -0.2));
+      R(x + 4, y - 8, 2, 5, col(b, '#7a5c48'));
+      for (let r = 0; r <= 8; r++) {
+        const ww = Math.round(4 + ((b.w - 2) * r) / 8);
+        R(x + ((b.w - ww) >> 1), y - 9 + r, ww, 1, r === 8 ? shade(roof, -0.25) : roof);
+        if (r >= 3 && r <= 6) R(x + ((b.w + ww) >> 1) - 5, y - 9 + r, 3, 1, panel);
+      }
+      door(b, x);
+    },
+    glow(b, x, y, t, env) {
+      g.globalAlpha = 0.6 + 0.4 * env.night;
+      R(x + (b.w >> 1), y - 10, 1, 1, `hsl(${Math.floor(t * 40 + b.seed) % 360} 90% 65%)`);
+      g.globalAlpha = env.night;
+      R(x + (b.w >> 1) + 2, GROUND - 6, 1, 1, '#fff1b0');
+    },
+  },
+
+  // message brokers, mail and notifications: envelopes fly off the roof with the traffic
+  postoffice: {
+    size: () => [26, 20], extra: 3, color: '#c0392b',
+    windows: (b) => [{ x: 3, y: 11, w: 4, h: 3 }, { x: b.w - 7, y: 11, w: 4, h: 3 }],
+    draw(b, x, y) {
+      const body = col(b, '#c9b79a'), red = col(b, b.color);
+      R(x, y, b.w, b.h, body);
+      R(x + b.w - 2, y, 2, b.h, shade(body, -0.25));
+      R(x - 1, y - 2, b.w + 2, 2, shade(red, -0.2));
+      R(x + 2, y + 2, b.w - 4, 7, red);
+      text('POST', x + ((b.w - textWidth('POST')) >> 1), y + 3, col(b, '#ffd86b'));
+      R(x + 2, GROUND - 6, 3, 4, col(b, '#c0392b'));
+      R(x + 3, GROUND - 2, 1, 2, col(b, '#3a3a44'));
+      door(b, x);
+    },
+    glow(b, x, y, t, env, dt) {
+      const traffic = b.c.netRx + b.c.netTx;
+      if (traffic > 2000 && Math.random() < dt * Math.min(3, traffic / 20e3)) {
+        particles.push({ x: x + 4 + Math.random() * (b.w - 8), y: y - 3, vx: (Math.random() - 0.5) * 16, vy: -14 - Math.random() * 8, life: 1.6, max: 1.6, c: '#f4f1e8', s: 2, grav: 4 });
+      }
+    },
+  },
+
+  // monitoring and metrics: an observatory whose telescope slowly sweeps the sky
+  observatory: {
+    size: () => [22, 18], extra: 11, color: '#dfe3ea',
+    windows: (b) => [{ x: 3, y: 5, w: 3, h: 3 }, { x: b.w - 6, y: 5, w: 3, h: 3 }],
+    draw(b, x, y, t) {
+      const wall = col(b, '#dfe3ea'), dome = col(b, '#b8c2cf'), cx = x + (b.w >> 1), rad = 9;
+      R(x, y, b.w, b.h, wall);
+      R(x + b.w - 2, y, 2, b.h, shade(wall, -0.25));
+      for (let r = 0; r < rad; r++) {
+        const half = Math.round(Math.sqrt(rad * rad - (rad - r) ** 2));
+        R(cx - half, y - rad + r, half * 2, 1, dome);
+        R(cx - half, y - rad + r, 1, 1, shade(dome, 0.3));
+      }
+      R(cx - 1, y - rad + 1, 2, rad - 1, col(b, '#26304a'));
+      const a = -1.25 + Math.sin(t * 0.15 + b.seed) * (b.dead ? 0 : 0.35);
+      for (let i = 0; i < 7; i++) R(cx + Math.cos(a) * i, y - 4 + Math.sin(a) * i, 1, 1, col(b, '#5a5f6a'));
+      door(b, x);
+    },
+    glow(b, x, y, t, env) {
+      const cx = x + (b.w >> 1);
+      g.globalAlpha = 0.15 + 0.6 * env.night;
+      R(cx - 1, y - 8, 2, 7, '#9fd4ff');
+    },
+  },
+
+  // passwords, auth and money: a stone bank with a vault door that turns while it works
+  bank: {
+    size: () => [28, 22], extra: 7, color: '#d4a83a',
+    windows: (b) => [{ x: 3, y: 4, w: 3, h: 6 }, { x: b.w - 6, y: 4, w: 3, h: 6 }],
+    draw(b, x, y) {
+      const stone = col(b, '#cfc6b0'), gold = col(b, b.color), metal = col(b, '#9aa0a8');
+      R(x, y, b.w, b.h, stone);
+      for (let yy = 3; yy < b.h - 2; yy += 4) R(x, y + yy, b.w, 1, shade(stone, -0.12));
+      R(x + b.w - 2, y, 2, b.h, shade(stone, -0.25));
+      for (let r = 0; r < 6; r++) {
+        const ww = Math.round(((b.w + 2) * (r + 1)) / 6);
+        R(x + ((b.w - ww) >> 1), y - 7 + r, ww, 1, stone);
+      }
+      R(x - 1, y - 1, b.w + 2, 1, gold);
+      const cx = x + (b.w >> 1), cy = GROUND - 9;
+      disc(cx, cy, 5, metal);
+      disc(cx, cy, 3, shade(metal, -0.2));
+      R(cx - 3, cy, 7, 1, shade(metal, -0.45));
+      R(cx, cy - 3, 1, 7, shade(metal, -0.45));
+      R(x - 1, GROUND - 2, b.w + 2, 2, shade(stone, -0.2));
+    },
+    glow(b, x, y, t, env) {
+      const cx = x + (b.w >> 1), cy = GROUND - 9;
+      if (b.c.cpu > 0.5) {
+        const a = t * Math.min(6, 0.5 + b.c.cpu / 10);
+        g.globalAlpha = 0.8;
+        for (let k = 0; k < 4; k++) {
+          const ang = a + (k * Math.PI) / 2;
+          R(cx + Math.round(Math.cos(ang) * 3), cy + Math.round(Math.sin(ang) * 3), 1, 1, '#f0dc8c');
+        }
+      }
+      g.globalAlpha = 0.4 + 0.6 * env.night;
+      R(cx, y - 8, 1, 1, '#ffd86b');
+    },
+  },
+
+  // documents, books, wikis, bookmarks and feeds: a library with its shelves in the window
+  library: {
+    size: () => [26, 26], extra: 2, color: '#8a4b3a',
+    windows: () => [],
+    draw(b, x, y) {
+      const brick = col(b, b.color), dark = col(b, '#2a1f2e');
+      const spines = ['#c0392b', '#e6b83c', '#37946e', '#5b6ee1', '#d77bba', '#d9a066'];
+      R(x, y, b.w, b.h, brick);
+      R(x + b.w - 2, y, 2, b.h, shade(brick, -0.3));
+      R(x - 1, y, b.w + 2, 2, shade(brick, 0.25));
+      for (const sy of [y + 5, y + 13]) {
+        R(x + 3, sy, b.w - 6, 7, dark);
+        for (let i = 0; i < b.w - 8; i += 2) {
+          const tall = (i * 7 + b.seed) % 3;
+          R(x + 4 + i, sy + 1 + tall, 1, 5 - tall, col(b, spines[(i + b.seed) % spines.length]));
+        }
+      }
+      door(b, x);
+    },
+    glow(b, x, y, t, env) {
+      g.globalAlpha = 0.08 + 0.3 * env.night;
+      R(x + 3, y + 5, b.w - 6, 7, '#ffd98a');
+      R(x + 3, y + 13, b.w - 6, 7, '#ffd98a');
+    },
+  },
+
+  // git, CI, automation and file conversion: a factory whose chimney smokes with the CPU
+  factory: {
+    size: () => [30, 16], extra: 20, color: '#8a7a6a',
+    windows: (b) => {
+      const out = [];
+      for (let wx = 2; wx <= b.w - 9; wx += 5) out.push({ x: wx, y: 4, w: 3, h: 3 });
+      return out;
+    },
+    draw(b, x, y) {
+      const body = col(b, b.color), roof = col(b, '#5a4e46'), glass = col(b, '#7fa8c8'), brick = col(b, '#7a3a2a');
+      R(x, y, b.w, b.h, body);
+      R(x + b.w - 2, y, 2, b.h, shade(body, -0.3));
+      for (let i = 0; i + 9 < b.w - 6; i += 10) {
+        for (let r = 0; r < 5; r++) R(x + i, y - 5 + r, 1 + r * 2, 1, roof);
+        R(x + i + 9, y - 5, 1, 5, glass);
+      }
+      R(x + b.w - 6, y - 18, 4, 18, brick);
+      for (let yy = y - 15; yy < y; yy += 5) R(x + b.w - 6, yy, 4, 1, shade(brick, -0.3));
+      R(x + 3, GROUND - 7, 7, 7, col(b, '#5d6266'));
+      for (let yy = GROUND - 6; yy < GROUND; yy += 2) R(x + 3, yy, 7, 1, col(b, '#4a4e52'));
+    },
+    glow(b, x, y, t, env, dt) {
+      // a thin wisp when idle, a thick plume when busy
+      if (Math.random() < dt * (1.2 + Math.min(b.c.cpu, 200) / 5)) {
+        const grey = ['#c4c4cc', '#a8a8b2', '#8a8a96'][Math.floor(Math.random() * 3)];
+        const life = 3 + Math.random() * 1.5;
+        particles.push({ x: x + b.w - 5 + Math.random() * 2, y: y - 19, vx: 3 + Math.random() * 4, vy: -6 - Math.random() * 5, life, max: life, c: grey, s: b.c.cpu > 20 ? 3 : 2, grav: -1 });
+      }
+      if (Math.floor(t * 1.3 + b.seed) % 2) {
+        g.globalAlpha = 0.4 + 0.6 * env.night;
+        R(x + b.w - 4, y - 19, 1, 1, '#ff4b4b');
+      }
+    },
+  },
+
+  // file sync and office suites: a glass office tower
+  office: {
+    size: (r) => [18, 42 + Math.floor(r() * 20)], extra: 5, color: '#4a7fb0',
+    windows: (b) => {
+      const out = [];
+      for (let wy = 2; wy <= b.h - 10; wy += 4)
+        for (let wx = 2; wx <= b.w - 5; wx += 4) out.push({ x: wx, y: wy, w: 2, h: 2 });
+      return out;
+    },
+    draw(b, x, y) {
+      const c = col(b, b.color);
+      R(x, y, b.w, b.h, c);
+      for (let xx = 0; xx < b.w; xx += 4) R(x + xx, y, 1, b.h, shade(c, -0.18));
+      for (let yy = 0; yy < b.h; yy += 4) R(x, y + yy, b.w, 1, shade(c, -0.25));
+      R(x + 5, y + 1, 1, b.h - 2, shade(c, 0.3));
+      R(x + b.w - 2, y, 2, b.h, shade(c, -0.35));
+      R(x + 3, y - 4, b.w - 6, 3, col(b, '#e8e8f0'));
+      R(x + (b.w >> 1) - 1, y - 3, 2, 1, c);
+      R(x + (b.w >> 1) - 3, GROUND - 6, 6, 6, col(b, '#1a2a3a'));
+    },
+  },
+
+  // dashboards: a town hall with a working clock and a sign that counts the city's running containers
+  townhall: {
+    size: () => [28, 20], extra: 22, color: '#3f6b5a',
+    windows: (b) => [{ x: 3, y: 12, w: 3, h: 4 }, { x: b.w - 6, y: 12, w: 3, h: 4 }],
+    draw(b, x, y) {
+      const wall = col(b, '#d8c8a8'), copper = col(b, b.color), cx = x + (b.w >> 1);
+      R(x, y, b.w, b.h, wall);
+      R(x + b.w - 2, y, 2, b.h, shade(wall, -0.25));
+      R(x - 1, y, b.w + 2, 1, shade(wall, -0.2));
+      R(cx - 4, y - 16, 8, 16, wall);
+      R(cx + 2, y - 16, 2, 16, shade(wall, -0.25));
+      for (let r = 0; r < 6; r++) R(cx - 1 - (r >> 1), y - 22 + r, 2 + (r >> 1) * 2, 1, copper);
+      R(x + 3, y + 3, b.w - 6, 7, col(b, '#1a1220'));
+      disc(cx, y - 10, 3, col(b, '#f4f1e8'));
+      clockHands(cx, y - 10, col(b, '#26304a'));
+      door(b, x);
+    },
+    glow(b, x, y, t, env) {
+      const cx = x + (b.w >> 1);
+      g.globalAlpha = 0.3 + 0.7 * env.night;
+      disc(cx, y - 10, 3, '#fff6c8');
+      clockHands(cx, y - 10, '#26304a');
+      g.globalAlpha = 1;
+      const up = buildings.filter((o) => !o.dead).length;
+      const label = up < 100 ? `${up} UP` : String(up);
+      text(label, x + ((b.w - textWidth(label)) >> 1), y + 4, '#8fe388');
+    },
+  },
+
+  // small tools and everyday apps: a corner shop with a striped awning
+  shop: {
+    size: () => [20, 14], extra: 7,
+    windows: () => [{ x: 2, y: 7, w: 8, h: 5 }],
+    draw(b, x, y) {
+      const wall = col(b, '#e8dcc0'), stripe = col(b, b.color), white = col(b, '#f4f1e8');
+      R(x, y, b.w, b.h, wall);
+      R(x + b.w - 2, y, 2, b.h, shade(wall, -0.2));
+      R(x + 1, y - 7, b.w - 2, 7, col(b, '#3a2a2a'));
+      for (let i = 0; i < b.w + 2; i++) {
+        const c = (i >> 1) % 2 ? white : stripe;
+        R(x - 1 + i, y + 1, 1, 3, c);
+        if (i % 2 === 0) R(x - 1 + i, y + 4, 1, 1, c);
+      }
+      R(x + b.w - 7, GROUND - 7, 4, 7, col(b, '#5a3a2a'));
+    },
+    glow(b, x, y, t, env) {
+      g.globalAlpha = 0.35 + 0.65 * env.night;
+      text('OPEN', x + ((b.w - textWidth('OPEN')) >> 1), y - 6, '#ff6b9a');
+    },
+  },
 };
+
+// Clock hands for the town hall, set to the city's time of day.
+function clockHands(cx, cy, c) {
+  const h = currentHour(), m = (h % 1) * 60;
+  const ah = ((h % 12) / 12) * Math.PI * 2 - Math.PI / 2, am = (m / 60) * Math.PI * 2 - Math.PI / 2;
+  for (let i = 1; i <= 3; i++) R(cx + Math.round(Math.cos(am) * i), cy + Math.round(Math.sin(am) * i), 1, 1, c);
+  for (let i = 1; i <= 2; i++) R(cx + Math.round(Math.cos(ah) * i), cy + Math.round(Math.sin(ah) * i), 1, 1, c);
+  R(cx, cy, 1, 1, c);
+}
 
 const buildingCache = new Map(); // name -> building, survives re-layouts
 let buildings = [];
@@ -552,7 +822,7 @@ function makeBuilding(c) {
   const kind = kindOf(c), spec = KINDS[kind];
   const [w, h] = spec.size(r);
   const brand = Object.keys(BRAND).find((k) => (c.name + ' ' + c.image).toLowerCase().includes(k));
-  const fallback = kind === 'silo' ? '#9aa3ad' : kind === 'gate' ? '#d04648' : PALETTE[seed % PALETTE.length];
+  const fallback = kind === 'silo' ? '#9aa3ad' : kind === 'gate' ? '#d04648' : spec.color ?? PALETTE[seed % PALETTE.length];
   const b = {
     name: c.name, kind, spec, w, h: 0, hBase: h, extra: spec.extra, seed: seed % 1000,
     color: brand ? BRAND[brand] : fallback, roof: Math.floor(r() * 4), c, x: 0, flash: 0,
@@ -562,7 +832,7 @@ function makeBuilding(c) {
 }
 
 // Tall things grow into the available sky so the city doesn't look lost on wide screens.
-const GROWTH = { tower: 1, lighthouse: 1, watchtower: 1, silo: 0.35 };
+const GROWTH = { tower: 1, office: 1, lighthouse: 1, watchtower: 1, silo: 0.35 };
 let heightBoost = 1;
 
 function applySize(b) {
@@ -707,7 +977,8 @@ function onEvent(e) {
 
 function onSnapshot(m) {
   state.containers = m.containers;
-  const key = m.containers.map((c) => c.name).sort().join('|');
+  // the kind is part of the key, so changing the homelab-world.kind label rebuilds the building
+  const key = m.containers.map((c) => c.name + ':' + (c.kind || '')).sort().join('|');
   for (const c of m.containers) {
     const b = buildingCache.get(c.name);
     if (b) b.c = c;

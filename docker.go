@@ -7,9 +7,16 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+)
+
+// Container labels that change how a container shows up in the city.
+const (
+	labelKind = "homelab-world.kind" // building kind, e.g. cinema; overrides the guess from name and image
+	labelHide = "homelab-world.hide" // "true" leaves the container out of the city
 )
 
 // Minimal Docker Engine API client over the unix socket. Stdlib only.
@@ -74,13 +81,14 @@ type Container struct {
 	Name    string  `json:"name"`
 	Image   string  `json:"image"`
 	Project string  `json:"project"`
-	State   string  `json:"state"`  // running, exited, restarting, paused, created
-	Health  string  `json:"health"` // healthy, unhealthy, starting, or ""
-	Status  string  `json:"status"` // human readable, e.g. "Up 2 hours (healthy)"
-	CPU     float64 `json:"cpu"`    // percent, 100 = one full core
-	Mem     uint64  `json:"mem"`    // bytes
-	NetRx   float64 `json:"netRx"`  // bytes/sec
-	NetTx   float64 `json:"netTx"`  // bytes/sec
+	State   string  `json:"state"`          // running, exited, restarting, paused, created
+	Health  string  `json:"health"`         // healthy, unhealthy, starting, or ""
+	Status  string  `json:"status"`         // human readable, e.g. "Up 2 hours (healthy)"
+	Kind    string  `json:"kind,omitempty"` // building kind chosen with the homelab-world.kind label
+	CPU     float64 `json:"cpu"`            // percent, 100 = one full core
+	Mem     uint64  `json:"mem"`            // bytes
+	NetRx   float64 `json:"netRx"`          // bytes/sec
+	NetTx   float64 `json:"netTx"`          // bytes/sec
 }
 
 type sample struct {
@@ -102,10 +110,14 @@ func (c *collector) collect(ctx context.Context) ([]Container, error) {
 		return nil, err
 	}
 
+	list = slices.DeleteFunc(list, func(ac apiContainer) bool {
+		return strings.EqualFold(ac.Labels[labelHide], "true")
+	})
 	out := make([]Container, len(list))
 	var wg sync.WaitGroup
 	for i, ac := range list {
 		out[i] = Container{
+			Kind:    strings.ToLower(strings.TrimSpace(ac.Labels[labelKind])),
 			ID:      ac.ID[:12],
 			Name:    strings.TrimPrefix(firstOr(ac.Names, ac.ID[:12]), "/"),
 			Image:   ac.Image,
@@ -188,6 +200,9 @@ func (d *dockerClient) watchEvents(ctx context.Context, emit func(DockerEvent)) 
 				}
 				if dec.Decode(&e) != nil {
 					break
+				}
+				if strings.EqualFold(e.Actor.Attributes[labelHide], "true") {
+					continue
 				}
 				action := e.Action
 				if strings.HasPrefix(action, "health_status") {

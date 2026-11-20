@@ -2,7 +2,7 @@
 
 Your Docker containers as a living pixel city. Every compose project is a district and every container is a building.
 
-- **Buildings** depend on what the container is: Jellyfin is a cinema, Pi-hole a lighthouse, Immich a gallery, its ML worker a lab, databases are silos, VPNs bunkers, proxies gates, Uptime Kuma a watchtower, Unbound a radio mast, qBittorrent a warehouse, Portainer a crane. Everything else becomes an apartment tower.
+- **Buildings** depend on what the container is (see [Buildings](#buildings)): Jellyfin is a cinema, Home Assistant a house with solar panels, Grafana an observatory, Vaultwarden a bank, Forgejo a factory that smokes with its CPU, Homepage a town hall with a working clock. Anything it can't place becomes an apartment tower, and a label lets you choose.
 - **Windows** light up with CPU load and flicker more when a container is busy.
 - **Cars** leave a building for outgoing traffic and arrive for incoming traffic.
 - **Jellyfin** sweeps a searchlight across the sky while someone is streaming.
@@ -26,6 +26,49 @@ open http://localhost:8099
 
 It reads the Docker socket read-only. The backend is one stdlib-only Go binary with the frontend embedded.
 
+## Buildings
+
+The building is picked from the container's name and image. The first match in this list wins, so a database belonging to an app (`immich_postgres`, `paperless-db`) becomes a silo, not part of the app.
+
+| Kind | Building | Recognises, for example |
+|---|---|---|
+| `lab` | lab with a glowing antenna | machine learning, Ollama, Open WebUI, Whisper |
+| `silo` | silo | Postgres, MariaDB, MySQL, Redis, Valkey, InfluxDB, Elasticsearch, names ending in `-db` |
+| `bunker` | bunker | socket proxies, Gluetun, WireGuard, Tailscale, Cloudflared, CrowdSec |
+| `crane` | construction crane | Portainer, Watchtower, Diun, Komodo, Dockge |
+| `cinema` | cinema, searchlight while streaming | Jellyfin, Plex, Emby, Navidrome |
+| `lighthouse` | lighthouse | Pi-hole, AdGuard Home, Blocky |
+| `antenna` | radio mast | Unbound, dnsmasq, CoreDNS |
+| `gallery` | museum | Immich, PhotoPrism, Lychee |
+| `watchtower` | watchtower, red when anything is wrong | Uptime Kuma, Gatus, Healthchecks, Frigate |
+| `observatory` | observatory | Grafana, Prometheus, Netdata, Loki, Dozzle, Beszel |
+| `house` | house with a smart light | Home Assistant, Zigbee2MQTT, ESPHome, Node-RED |
+| `postoffice` | post office, envelopes fly with the traffic | Mosquitto, RabbitMQ, NATS, ntfy, Gotify, mail servers |
+| `bank` | bank, the vault door turns while it works | Vaultwarden, Authentik, Authelia, Keycloak, Actual, Firefly III |
+| `office` | glass office tower | Nextcloud, Seafile, OnlyOffice, Filebrowser |
+| `library` | library with books in the window | Paperless, Calibre, Kavita, Audiobookshelf, BookStack, wikis, Linkding, FreshRSS |
+| `factory` | factory, smokes with its CPU | Forgejo, Gitea, GitLab, CI runners, n8n, Tdarr, Stirling PDF |
+| `townhall` | town hall with a clock and an "N UP" sign | Homepage, Homarr, Heimdall, Dashy, Glance |
+| `shop` | corner shop | Mealie, Grocy, IT-Tools, CyberChef, PrivateBin |
+| `warehouse` | warehouse | qBittorrent, SABnzbd, Syncthing, MinIO, backup tools |
+| `gate` | city gate | Traefik, Caddy, nginx, Nginx Proxy Manager |
+| `tower` | apartment tower | everything else |
+
+### Labels
+
+| Label | Effect |
+|---|---|
+| `homelab-world.kind=observatory` | use this building, whatever the name or image says |
+| `homelab-world.hide=true` | leave the container out of the city and the ticker (init containers, sidecars) |
+
+```yaml
+services:
+  weather:
+    image: example/weather-station
+    labels:
+      homelab-world.kind: observatory
+```
+
 ## Controls
 
 | | |
@@ -40,6 +83,12 @@ It reads the Docker socket read-only. The backend is one stdlib-only Go binary w
 | `?fit` | shrink the pixels until the whole city fits, instead of panning |
 | `?demo`, `?demo=120` | made-up homelab, no Docker needed |
 
-## Hacking on the frontend
+## Hacking on it
 
-Set `WEB_DIR=/web` and mount `./web:/web` to serve the files from disk instead of the embedded copy. Then a browser refresh is enough to see changes. Building kinds live in `KINDS` in `web/world.js`.
+```sh
+docker compose -f compose.yaml -f compose.dev.yaml up -d --build   # serves web/ from disk
+dev/fixtures.sh up                                                 # a fake homelab of ~37 busybox containers
+dev/fixtures.sh down                                               # remove them again
+```
+
+With `compose.dev.yaml`, a browser refresh is enough to see frontend changes; Go changes need the `--build`. The fixtures are named after common apps, a few have (failing) health checks or CPU bursts, and two show the labels. Building kinds live in `KINDS` in `web/world.js`, the matching rules in `KIND_RULES`.

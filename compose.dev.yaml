@@ -1,0 +1,9 @@
+# Development: serve web/ from disk, so a browser refresh shows frontend changes.
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+# Go changes still need the --build. dev/fixtures.sh fills the city with fake containers.
+services:
+  homelab-world:
+    environment:
+      WEB_DIR: /web
+    volumes:
+      - ./web:/web:ro
