@@ -1,0 +1,39 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0e24;
+}
+
+canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  image-rendering: pixelated;
+  cursor: default;
+}
+
+#tip {
+  position: fixed;
+  pointer-events: none;
+  min-width: 160px;
+  padding: 8px 10px;
+  background: rgba(16, 18, 36, 0.94);
+  border: 2px solid #3f3f74;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.4);
+  color: #e8e8f0;
+  font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  white-space: nowrap;
+}
+
+#tip b {
+  display: block;
+  margin-bottom: 2px;
+  color: #ffd86b;
+  font-weight: 600;
+}
+
+#tip .ok { color: #8fe388; }
+#tip .bad { color: #ff6b6b; }
+#tip .meh { color: #e6b83c; }
+#tip .dim { color: #8a8ca8; }
