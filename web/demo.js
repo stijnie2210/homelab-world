@@ -1,10 +1,5 @@
 'use strict';
 
-// Demo mode: a made-up homelab that lives entirely in the browser, so the city can be shown
-// without a Docker socket (a README GIF, a static demo page, or just trying it out).
-//   ?demo        about 36 containers in 9 compose projects
-//   ?demo=120    a bigger stack, to see how the city copes
-
 const DEMO_STACK = [
   ['mediastack', ['gluetun qmcgaw/gluetun', 'qbittorrent lscr.io/linuxserver/qbittorrent', 'prowlarr lscr.io/linuxserver/prowlarr',
     'radarr lscr.io/linuxserver/radarr', 'sonarr lscr.io/linuxserver/sonarr', 'bazarr lscr.io/linuxserver/bazarr',
@@ -21,7 +16,6 @@ const DEMO_STACK = [
   ['', ['portainer portainer/portainer-ce', 'vaultwarden vaultwarden/server', 'homepage ghcr.io/gethomepage/homepage']],
 ];
 
-// Extra apps for ?demo=N beyond the base stack, grouped into small projects.
 const DEMO_EXTRA = ['gitea', 'audiobookshelf', 'navidrome', 'syncthing', 'freshrss', 'mealie', 'actual', 'linkding',
   'stirling-pdf', 'it-tools', 'dozzle', 'watchtower', 'authentik-server', 'authentik-worker', 'code-server', 'minio', 'n8n',
   'changedetection', 'frigate', 'scrypted', 'kavita', 'calibre-web', 'wikijs', 'bookstack', 'ntfy', 'gotify',
@@ -120,7 +114,6 @@ function startDemo({ onSnapshot, onEvent, count }) {
 
   const later = (sec, fn) => setTimeout(() => { fn(); tick(); }, sec * 1000);
 
-  // A small script of mishaps, like a real homelab on a normal day.
   function mishap() {
     const healthy = sims.filter((s) => s.state === 'running' && s.health !== 'unhealthy');
     const s = pick(healthy);

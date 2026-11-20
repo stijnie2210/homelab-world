@@ -1,14 +1,8 @@
 #!/bin/sh
-# Fills the city with small busybox containers named after common self-hosted apps, so you can
-# check building kinds against a real Docker socket without running the real apps.
-#   dev/fixtures.sh up      start them (again)
-#   dev/fixtures.sh down    remove them
-# They carry the label homelab-world.fixture=1, and a fake compose project label so they form districts.
 set -eu
 
 IMAGE=busybox:1.37
 
-# project name image   (the image is only documentation: every fixture runs busybox, so kinds are matched on the name)
 FIXTURES='
 media jellyfin jellyfin/jellyfin
 media sonarr lscr.io/linuxserver/sonarr
@@ -63,15 +57,12 @@ up() {
     set -- --label homelab-world.fixture=1
     [ "$project" != "-" ] && set -- "$@" --label "com.docker.compose.project=$project"
     case "$name" in
-      # a few with a health check, one of them failing, so health states show up too
       grafana|vaultwarden|nextcloud) set -- "$@" --health-cmd true --health-interval 10s ;;
       authentik-server) set -- "$@" --health-cmd false --health-interval 10s --health-retries 1 ;;
-      # the labels: an app nobody can guess gets a building picked by hand, a sidecar stays out of the city
       weather-station) set -- "$@" --label homelab-world.kind=observatory ;;
       metrics-init) set -- "$@" --label homelab-world.hide=true ;;
     esac
     case "$name" in
-      # short CPU bursts now and then, so windows flicker and the factory smokes
       jellyfin|n8n|frigate|prometheus) cmd='while true; do timeout 2 sh -c "while :; do :; done"; sleep 7; done' ;;
       *) cmd='sleep 2147483647' ;;
     esac

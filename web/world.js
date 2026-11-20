@@ -4,9 +4,7 @@
 // All art is drawn at a low logical resolution and scaled up with nearest-neighbour.
 //
 // URL params:  ?hour=21  freeze time of day   ?speed=600  fast-forward the day   ?scale=4  force pixel size
-//              ?fit  shrink until the whole city fits instead of panning   ?demo[=N]  made-up homelab (demo.js)
 // Keys:        N  cycle day/dusk/night/dawn/live    D  fire a demo event (and some Pi-hole rain)
-//              arrows  pan a city that is wider than the screen (so do drag and the scroll wheel)
 // Double-click toggles fullscreen.
 
 const params = new URLSearchParams(location.search);
@@ -196,9 +194,6 @@ const BRAND = {
   forgejo: '#d65a1f', gitea: '#609926', gitlab: '#e24329', paperless: '#2f7a3a', mealie: '#e58325', n8n: '#ea4b71',
 };
 
-// The first rule that matches the container's name or image decides its building. Order matters:
-// databases come before the apps they belong to (immich_postgres is a silo, not a gallery),
-// and socket proxies before reverse proxies.
 const KIND_RULES = [
   ['lab', /machine.?learning|ollama|open-?webui|localai|whisper|comfyui|stable-?diffusion/],
   ['silo', /[-_]db\b|database|postgres|mysql|mariadb|mongo|redis|valkey|dragonfly|keydb|influx|timescale|clickhouse|elasticsearch|opensearch|meilisearch|typesense|couchdb|etcd/],
@@ -223,7 +218,7 @@ const KIND_RULES = [
 ];
 
 function kindOf(c) {
-  if (c.kind && KINDS[c.kind]) return c.kind; // the homelab-world.kind label
+  if (c.kind && KINDS[c.kind]) return c.kind;
   const s = (c.name + ' ' + c.image).toLowerCase();
   for (const [kind, re] of KIND_RULES) if (re.test(s)) return kind;
   return 'tower';
@@ -559,7 +554,6 @@ const KINDS = {
     },
   },
 
-  // home automation: a house with solar panels and a smart light on the ridge
   house: {
     size: () => [22, 16], extra: 11, color: '#a8483c',
     windows: (b) => [{ x: 3, y: 4, w: 4, h: 4 }, { x: b.w - 7, y: 4, w: 4, h: 4 }],
@@ -583,7 +577,6 @@ const KINDS = {
     },
   },
 
-  // message brokers, mail and notifications: envelopes fly off the roof with the traffic
   postoffice: {
     size: () => [26, 20], extra: 3, color: '#c0392b',
     windows: (b) => [{ x: 3, y: 11, w: 4, h: 3 }, { x: b.w - 7, y: 11, w: 4, h: 3 }],
@@ -606,7 +599,6 @@ const KINDS = {
     },
   },
 
-  // monitoring and metrics: an observatory whose telescope slowly sweeps the sky
   observatory: {
     size: () => [22, 18], extra: 11, color: '#dfe3ea',
     windows: (b) => [{ x: 3, y: 5, w: 3, h: 3 }, { x: b.w - 6, y: 5, w: 3, h: 3 }],
@@ -631,7 +623,6 @@ const KINDS = {
     },
   },
 
-  // passwords, auth and money: a stone bank with a vault door that turns while it works
   bank: {
     size: () => [28, 22], extra: 7, color: '#d4a83a',
     windows: (b) => [{ x: 3, y: 4, w: 3, h: 6 }, { x: b.w - 6, y: 4, w: 3, h: 6 }],
@@ -667,7 +658,6 @@ const KINDS = {
     },
   },
 
-  // documents, books, wikis, bookmarks and feeds: a library with its shelves in the window
   library: {
     size: () => [26, 26], extra: 2, color: '#8a4b3a',
     windows: () => [],
@@ -693,7 +683,6 @@ const KINDS = {
     },
   },
 
-  // git, CI, automation and file conversion: a factory whose chimney smokes with the CPU
   factory: {
     size: () => [30, 16], extra: 20, color: '#8a7a6a',
     windows: (b) => {
@@ -715,7 +704,6 @@ const KINDS = {
       for (let yy = GROUND - 6; yy < GROUND; yy += 2) R(x + 3, yy, 7, 1, col(b, '#4a4e52'));
     },
     glow(b, x, y, t, env, dt) {
-      // a thin wisp when idle, a thick plume when busy
       if (Math.random() < dt * (1.2 + Math.min(b.c.cpu, 200) / 5)) {
         const grey = ['#c4c4cc', '#a8a8b2', '#8a8a96'][Math.floor(Math.random() * 3)];
         const life = 3 + Math.random() * 1.5;
@@ -728,7 +716,6 @@ const KINDS = {
     },
   },
 
-  // file sync and office suites: a glass office tower
   office: {
     size: (r) => [18, 42 + Math.floor(r() * 20)], extra: 5, color: '#4a7fb0',
     windows: (b) => {
@@ -750,7 +737,6 @@ const KINDS = {
     },
   },
 
-  // dashboards: a town hall with a working clock and a sign that counts the city's running containers
   townhall: {
     size: () => [28, 20], extra: 22, color: '#3f6b5a',
     windows: (b) => [{ x: 3, y: 12, w: 3, h: 4 }, { x: b.w - 6, y: 12, w: 3, h: 4 }],
@@ -779,7 +765,6 @@ const KINDS = {
     },
   },
 
-  // small tools and everyday apps: a corner shop with a striped awning
   shop: {
     size: () => [20, 14], extra: 7,
     windows: () => [{ x: 2, y: 7, w: 8, h: 5 }],
@@ -802,7 +787,6 @@ const KINDS = {
   },
 };
 
-// Clock hands for the town hall, set to the city's time of day.
 function clockHands(cx, cy, c) {
   const h = currentHour(), m = (h % 1) * 60;
   const ah = ((h % 12) / 12) * Math.PI * 2 - Math.PI / 2, am = (m / 60) * Math.PI * 2 - Math.PI / 2;
@@ -872,8 +856,6 @@ function layout() {
   contentWidth = Math.max(160, x - DISTRICT_GAP + MARGIN * 2);
 }
 
-// Building x positions are world coordinates. A city that fits is centred on screen; a wider one
-// starts at the left edge of the world and the camera pans across it.
 function position() {
   const off = contentWidth <= W ? Math.floor((W - contentWidth) / 2) + MARGIN : MARGIN;
   for (const b of buildings) b.x = b.rx + off;
@@ -884,12 +866,9 @@ function position() {
   display.classList.toggle('pannable', cam.max > 0);
 }
 
-// ---------- camera ----------
 
-// Drifts slowly across a wide city, flies to a building when something happens to it, and
-// leaves the steering to you for a while after you drag, scroll or press an arrow key.
 const cam = { x: 0, target: 0, max: 0, dir: 1, pauseUntil: 0, holdUntil: 0, manualUntil: 0, dragging: null };
-const DRIFT = 7; // logical pixels per second
+const DRIFT = 7;
 const clock = () => performance.now() / 1000;
 
 function updateCamera(dt, t) {
@@ -921,7 +900,6 @@ function panBy(dx, smooth) {
   cam.manualUntil = clock() + 30;
 }
 
-// Draw in world coordinates (shifted by the camera) or in screen coordinates.
 let camI = 0;
 const inWorld = () => g.setTransform(1, 0, 0, 1, -camI, 0);
 const onScreen = () => g.setTransform(1, 0, 0, 1, 0, 0);
@@ -977,7 +955,6 @@ function onEvent(e) {
 
 function onSnapshot(m) {
   state.containers = m.containers;
-  // the kind is part of the key, so changing the homelab-world.kind label rebuilds the building
   const key = m.containers.map((c) => c.name + ':' + (c.kind || '')).sort().join('|');
   for (const c of m.containers) {
     const b = buildingCache.get(c.name);
@@ -1024,8 +1001,6 @@ function connect() {
 function resize() {
   const dpr = window.devicePixelRatio || 1;
   const pw = Math.floor(innerWidth * dpr), ph = Math.floor(innerHeight * dpr);
-  // Shrink the pixels until the city fits, but only down to about 450 logical pixels on the short side:
-  // below that a big stack turns into specks, so a wider city pans instead (unless ?fit).
   const minScale = params.has('fit') ? 1 : Math.max(1, Math.ceil(Math.min(ph, pw) / 450));
   let s = params.has('scale') ? parseInt(params.get('scale'), 10) : Math.max(1, Math.floor(ph / 190));
   if (!params.has('scale')) while (s > minScale && Math.ceil(pw / s) < contentWidth) s--;
@@ -1047,8 +1022,7 @@ function resize() {
     const puffs = Array.from({ length: 3 + Math.floor(r() * 3) }, (_, k) => ({ dx: k * 6 + Math.floor(r() * 3), dy: Math.floor(r() * 3) - 1, r: 3 + Math.floor(r() * 3) }));
     return { x: r() * W, y: 12 + r() * (GROUND * 0.35), v: 1.5 + r() * 3, puffs, seed: i };
   });
-  // a hazy far-away skyline that isn't backed by any container; it scrolls at a third of the
-  // camera speed, so it has to be a bit wider than the screen
+  // a hazy far-away skyline that isn't backed by any container
   const worldW = Math.max(W, contentWidth);
   skyline = [];
   for (let x = -4; x < W + cam.max / 3 + 4; ) {
@@ -1073,7 +1047,6 @@ function domeY(x) {
 
 function update(dt, t) {
   // traffic: cars leave a building for outgoing bytes, arrive for incoming
-  // (only for buildings on screen: in a wide city the car limit would otherwise go to streets nobody sees)
   for (const b of buildings) {
     if (b.dead || cars.length > 22 || !visible(b)) continue;
     const cx = b.x + (b.w >> 1);
@@ -1126,7 +1099,7 @@ function update(dt, t) {
     if (d.y >= floor) {
       drops.splice(i, 1);
       if (shield) flashes.push({ x: d.x, life: 0.5 });
-      for (let k = 0; k < 3; k++) { // particles live in world coordinates, rain on screen
+      for (let k = 0; k < 3; k++) {
         particles.push({ x: d.x + camI, y: floor, vx: (Math.random() - 0.5) * 30, vy: -10 - Math.random() * 15, life: 0.4, max: 0.4, c: '#ff8a9a', s: 1, grav: 80 });
       }
     }
@@ -1296,7 +1269,7 @@ function drawGlow(env, t, dt) {
     R(car.dir > 0 ? x - 1 : x + 7, y, 1, 1, '#ff4b4b');
   }
 
-  // pi-hole shield (the shield and the rain hang over the screen, not over the world)
+  // pi-hole shield
   onScreen();
   if (state.pihole) {
     g.globalAlpha = 0.05 + 0.05 * env.night;
@@ -1326,8 +1299,6 @@ function drawGlow(env, t, dt) {
   onScreen();
 }
 
-// A tiny skyline of the whole city with a frame around what's on screen; only for a city
-// that's wider than the screen. Stopped and unhealthy containers show up red in it.
 function drawMinimap(t) {
   if (cam.max <= 0 || !buildings.length) return;
   const mw = Math.min(140, Math.floor(W * 0.3)), x0 = W - mw - 6, base = H - 4;
@@ -1450,7 +1421,6 @@ function showTip(e) {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
-// Drag (mouse or finger) and the scroll wheel pan a city that's wider than the screen.
 display.addEventListener('pointerdown', (e) => {
   if (cam.max <= 0) return;
   cam.dragging = { x: e.clientX, moved: false };
