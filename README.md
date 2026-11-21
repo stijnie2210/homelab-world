@@ -20,10 +20,9 @@ Demo mode makes up a homelab of 36 containers in the browser, with streams, rest
 
 ```sh
 docker run --rm -p 8099:8099 ghcr.io/stijnie2210/homelab-world
-open "http://localhost:8099/?demo"
 ```
 
-Use `?demo=120` to see a bigger stack. Without Docker, open `web/index.html?demo` straight from a checkout.
+Then go to http://localhost:8099/?demo in your browser. Use `?demo=120` to see a bigger stack. Without Docker, open `web/index.html?demo` straight from a checkout.
 
 ## Run
 
@@ -32,8 +31,9 @@ Download [`compose.yaml`](compose.yaml) (and [`.env.example`](.env.example) if y
 ```sh
 cp .env.example .env   # optional, for Pi-hole rain
 docker compose up -d
-open http://localhost:8099
 ```
+
+Then go to http://localhost:8099 in your browser.
 
 The image is built for amd64 and arm64 (a Raspberry Pi works), about 10 MB, and runs as an unprivileged user. The backend is one stdlib-only Go binary with the frontend embedded.
 
