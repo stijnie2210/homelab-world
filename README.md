@@ -2,6 +2,8 @@
 
 Your Docker containers as a living pixel city. Every compose project is a district and every container is a building.
 
+![homelab world in demo mode: a pixel city at dusk with a lighthouse for Pi-hole, a cinema for Jellyfin sweeping its searchlight, broadcast studios for the arr apps and a box office for Seerr](assets/demo.gif)
+
 - **Buildings** depend on what the container is (see [Buildings](#buildings)): Jellyfin is a cinema, Home Assistant a house with solar panels, Grafana an observatory, Vaultwarden a bank, Forgejo a factory that smokes with its CPU, Homepage a town hall with a working clock. Anything it can't place becomes an apartment tower, and a label lets you choose.
 - **Windows** light up with CPU load and flicker more when a container is busy.
 - **Cars** leave a building for outgoing traffic and arrive for incoming traffic.

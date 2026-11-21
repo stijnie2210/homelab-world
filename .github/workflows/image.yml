@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['**.md', 'dev/**', 'LICENSE']
+    paths-ignore: ['**.md', 'dev/**', 'assets/**', 'LICENSE']
   workflow_dispatch:
 
 permissions:

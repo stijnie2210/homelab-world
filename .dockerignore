@@ -5,3 +5,4 @@ dev
 *.md
 LICENSE
 compose*.yaml
+assets
